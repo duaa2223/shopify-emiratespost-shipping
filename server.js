@@ -979,3 +979,270 @@ app.listen(PORT, () => {
   console.log('✅ Ready to receive requests from Shopify!');
   console.log('='.repeat(80) + '\n');
 });
+
+// أضف هذه الـ endpoints في server.js بعد الـ endpoints الموجودة
+
+// 🔍 Endpoint لاختبار جميع أكواد الخدمات
+app.post('/test-all-services', async (req, res) => {
+  try {
+    const { country, weight } = req.body;
+    
+    const testData = {
+      destinationCountry: country || 'JO',
+      destinationCity: 'Amman',
+      weight: weight || 250,
+      length: 20,
+      width: 15,
+      height: 10
+    };
+
+    console.log('\n🧪 Testing all service types...');
+    console.log('Test data:', testData);
+
+    // احصل على معرف الدولة
+    const countryId = await emiratesPostService.getCountryIdByCode(testData.destinationCountry);
+    
+    if (!countryId) {
+      return res.json({
+        success: false,
+        error: `Country ${testData.destinationCountry} not found`
+      });
+    }
+
+    // قائمة الخدمات للاختبار
+    const services = [
+      { name: 'Standard PRO-712', ShipmentType: 'Standard', ProductCode: 'PRO-712' },
+      { name: 'Economy PRO-713', ShipmentType: 'Economy', ProductCode: 'PRO-713' },
+      { name: 'Premium PRO-26', ShipmentType: 'Premium', ProductCode: 'PRO-26' },
+      { name: 'EMX DOU PRO-272', ShipmentType: 'Premium', ProductCode: 'PRO-272' },
+      { name: 'EMX DDU PRO-273', ShipmentType: 'Premium', ProductCode: 'PRO-273' }
+    ];
+
+    const results = [];
+
+    for (const service of services) {
+      console.log(`\nTesting ${service.name}...`);
+      
+      const requestBody = {
+        RateCalculationRequest: {
+          ShipmentType: service.ShipmentType,
+          ServiceType: "International",
+          OriginState: "",
+          OriginCity: parseInt(process.env.DEFAULT_ORIGIN_CITY || '3'),
+          DestinationCountry: parseInt(countryId),
+          DestinationState: "",
+          DestinationCity: testData.destinationCity,
+          Length: Math.ceil(testData.length),
+          Width: Math.ceil(testData.width),
+          Height: Math.ceil(testData.height),
+          Weight: Math.ceil(testData.weight),
+          CalculationCurrencyCode: "AED",
+          ContentTypeCode: "NonDocument",
+          DimensionUnit: "Centimetre",
+          WeightUnit: "Grams",
+          IsRegistered: "No",
+          ProductCode: service.ProductCode
+        }
+      };
+
+      try {
+        const response = await axios.post(
+          `${process.env.EMIRATES_POST_API_URL}/ratecalculator/rest/CalculatePriceRate`,
+          requestBody,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'AccountNo': process.env.EMIRATES_POST_ACCOUNT_NO,
+              'Password': process.env.EMIRATES_POST_PASSWORD
+            }
+          }
+        );
+
+        const rateData = response.data.RateCalculationResponse;
+        const price = parseFloat(rateData.TotalRate || rateData.BaseRate || 0);
+
+        results.push({
+          service: service.name,
+          status: price > 0 ? '✅ SUCCESS' : '⚠️ ZERO PRICE',
+          price: price,
+          baseRate: rateData.BaseRate,
+          totalRate: rateData.TotalRate,
+          fullResponse: rateData
+        });
+
+        console.log(`✅ ${service.name}: ${price} AED`);
+      } catch (error) {
+        results.push({
+          service: service.name,
+          status: '❌ FAILED',
+          error: error.message,
+          errorDetails: error.response?.data
+        });
+        console.log(`❌ ${service.name} failed: ${error.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      testData,
+      results,
+      recommendation: results.find(r => r.status === '✅ SUCCESS')?.service || 'None worked'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🔍 Endpoint للتحقق من الاتصال بـ API
+app.get('/test-api-connection', async (req, res) => {
+  try {
+    console.log('\n🔌 Testing API connection...');
+    console.log('API URL:', process.env.EMIRATES_POST_API_URL);
+    console.log('Account:', process.env.EMIRATES_POST_ACCOUNT_NO);
+    
+    // اختبار 1: جلب الدول
+    let countriesTest;
+    try {
+      const countriesResponse = await axios.get(
+        `${process.env.EMIRATES_POST_API_URL}/lookups/rest/GetCountries`
+      );
+      countriesTest = {
+        status: '✅ Success',
+        count: countriesResponse.data?.CountriesResponse?.Countries?.Country?.length || 0
+      };
+    } catch (error) {
+      countriesTest = {
+        status: '❌ Failed',
+        error: error.message
+      };
+    }
+
+    // اختبار 2: جلب الإمارات
+    let emiratesTest;
+    try {
+      const emiratesResponse = await axios.get(
+        `${process.env.EMIRATES_POST_API_URL}/lookups/rest/GetEmiratesDetails`
+      );
+      emiratesTest = {
+        status: '✅ Success',
+        count: emiratesResponse.data?.GetEmiratesDetailsResult?.EmirateBO?.length || 0
+      };
+    } catch (error) {
+      emiratesTest = {
+        status: '❌ Failed',
+        error: error.message
+      };
+    }
+
+    // اختبار 3: حساب سعر بسيط
+    let rateTest;
+    try {
+      const rateResponse = await axios.post(
+        `${process.env.EMIRATES_POST_API_URL}/ratecalculator/rest/CalculatePriceRate`,
+        {
+          RateCalculationRequest: {
+            ShipmentType: "Premium",
+            ServiceType: "International",
+            OriginCity: 3,
+            DestinationCountry: 972, // Jordan
+            Length: 20,
+            Width: 15,
+            Height: 10,
+            Weight: 250,
+            CalculationCurrencyCode: "AED",
+            ContentTypeCode: "NonDocument",
+            DimensionUnit: "Centimetre",
+            WeightUnit: "Grams",
+            IsRegistered: "No",
+            ProductCode: "PRO-26"
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'AccountNo': process.env.EMIRATES_POST_ACCOUNT_NO,
+            'Password': process.env.EMIRATES_POST_PASSWORD
+          }
+        }
+      );
+      
+      const rate = rateResponse.data.RateCalculationResponse;
+      rateTest = {
+        status: '✅ Success',
+        price: rate.TotalRate || rate.BaseRate,
+        fullResponse: rate
+      };
+    } catch (error) {
+      rateTest = {
+        status: '❌ Failed',
+        error: error.message,
+        errorDetails: error.response?.data
+      };
+    }
+
+    res.json({
+      apiConnection: {
+        url: process.env.EMIRATES_POST_API_URL,
+        account: process.env.EMIRATES_POST_ACCOUNT_NO
+      },
+      tests: {
+        getCountries: countriesTest,
+        getEmirates: emiratesTest,
+        calculateRate: rateTest
+      },
+      overallStatus: 
+        countriesTest.status === '✅ Success' &&
+        emiratesTest.status === '✅ Success' &&
+        rateTest.status === '✅ Success'
+          ? '✅ All tests passed'
+          : '❌ Some tests failed'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 🔍 Endpoint للبحث عن دولة معينة
+app.get('/find-country/:code', async (req, res) => {
+  try {
+    const countryCode = req.params.code.toUpperCase();
+    const countries = await emiratesPostService.getCountries();
+    
+    const country = countries.find(c => c.CountryCode === countryCode);
+    
+    if (country) {
+      res.json({
+        success: true,
+        found: true,
+        country: country,
+        message: `Found: ${country.CountryName} (ID: ${country.CountryId})`
+      });
+    } else {
+      // ابحث عن دول مشابهة
+      const similar = countries.filter(c => 
+        c.CountryCode.includes(countryCode) || 
+        c.CountryName.toLowerCase().includes(countryCode.toLowerCase())
+      );
+      
+      res.json({
+        success: true,
+        found: false,
+        message: `Country code ${countryCode} not found`,
+        similarCountries: similar.slice(0, 10)
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
