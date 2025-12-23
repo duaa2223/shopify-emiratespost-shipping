@@ -1,3 +1,536 @@
+// require('dotenv').config();
+// const express = require('express');
+// const emiratesPostService = require('./services/emiratesPostService');
+// const app = express();
+// const PORT = process.env.PORT || 3000;
+
+// // Middleware
+// app.use(express.json());
+
+// // CORS للسماح لـ Shopify بالاتصال
+// app.use((req, res, next) => {
+//   res.header('Access-Control-Allow-Origin', '*');
+//   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+//   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+//   if (req.method === 'OPTIONS') {
+//     return res.sendStatus(200);
+//   }
+//   next();
+// });
+
+// // الصفحة الرئيسية
+// app.get('/', (req, res) => {
+//   res.json({
+//     status: '✅ التطبيق يعمل بنجاح',
+//     message: 'تطبيق حساب الشحن عبر API البريد الإماراتي لـ Shopify',
+//     version: '2.0.0',
+//     apiProvider: 'Emirates Post API',
+//     endpoints: {
+//       main: 'POST /shipping-rates',
+//       test: 'GET /test-rate',
+//       countries: 'GET /countries',
+//       emirates: 'GET /emirates',
+//       health: 'GET /health'
+//     },
+//     timestamp: new Date().toISOString()
+//   });
+// });
+
+// // Health check
+// app.get('/health', (req, res) => {
+//   res.json({
+//     status: 'healthy',
+//     uptime: process.uptime(),
+//     timestamp: new Date().toISOString()
+//   });
+// });
+
+// // Endpoint الرئيسي لـ Shopify
+// app.post('/shipping-rates', async (req, res) => {
+//   try {
+//     console.log('📦 ===== Shopify Request Received =====');
+//     console.log('Full Request Body:', JSON.stringify(req.body, null, 2));
+
+//     const { rate } = req.body;
+
+//     // التحقق من البيانات المطلوبة
+//     if (!rate || !rate.destination) {
+//       console.error('❌ Invalid request structure');
+//       return res.status(200).json({ rates: [] });
+//     }
+
+//     const destination = rate.destination;
+//     const items = rate.items || [];
+    
+//     // حساب الوزن الإجمالي والأبعاد
+//     let totalWeight = 0;
+//     let maxLength = 0;
+//     let maxWidth = 0;
+//     let maxHeight = 0;
+
+//     items.forEach(item => {
+//       // الوزن بالجرام
+//       totalWeight += (item.grams || 0) * (item.quantity || 1);
+      
+//       // الأبعاد (إذا كانت متوفرة)
+//       if (item.properties) {
+//         maxLength = Math.max(maxLength, parseFloat(item.properties.length || 0));
+//         maxWidth = Math.max(maxWidth, parseFloat(item.properties.width || 0));
+//         maxHeight = Math.max(maxHeight, parseFloat(item.properties.height || 0));
+//       }
+//     });
+
+//     // قيم افتراضية إذا لم تكن الأبعاد متوفرة
+//     if (totalWeight === 0) totalWeight = 500;
+//     if (maxLength === 0) maxLength = 20;
+//     if (maxWidth === 0) maxWidth = 15;
+//     if (maxHeight === 0) maxHeight = 10;
+
+//     console.log(`📊 Calculated - Weight: ${totalWeight}g, Dimensions: ${maxLength}x${maxWidth}x${maxHeight}cm`);
+
+//     const countryCode = destination.country ? destination.country.toUpperCase() : '';
+//     const isUAE = countryCode === 'AE';
+
+//     console.log(`🌍 Destination: ${countryCode} - ${isUAE ? 'Domestic' : 'International'}`);
+
+//     let shippingRate;
+
+//     if (isUAE) {
+//       // شحن محلي داخل الإمارات
+//       const cityId = emiratesPostService.getCityIdFromName(destination.city);
+//       shippingRate = await emiratesPostService.calculateDomesticRate({
+//         originCity: process.env.DEFAULT_ORIGIN_CITY || '3',
+//         destinationCity: cityId,
+//         weight: totalWeight,
+//         length: maxLength,
+//         width: maxWidth,
+//         height: maxHeight
+//       });
+//     } else {
+//       // شحن دولي
+//       shippingRate = await emiratesPostService.calculateInternationalRate({
+//         destinationCountry: countryCode,
+//         destinationCity: destination.city || '',
+//         weight: totalWeight,
+//         length: maxLength,
+//         width: maxWidth,
+//         height: maxHeight
+//       });
+//     }
+
+//     if (!shippingRate) {
+//       console.log('⚠️ No shipping rate available');
+//       return res.status(200).json({ rates: [] });
+//     }
+
+//     // تحويل السعر إلى فلس (cents)
+//     const priceInCents = Math.round(shippingRate.price * 100);
+
+//     const response = {
+//       rates: [
+//         {
+//           service_name: shippingRate.serviceName,
+//           service_code: shippingRate.serviceCode,
+//           total_price: priceInCents.toString(),
+//           currency: 'AED',
+//           description: shippingRate.description || ''
+//         }
+//       ]
+//     };
+
+//     console.log('✅ Response sent:', JSON.stringify(response, null, 2));
+//     console.log('========================================');
+
+//     return res.status(200)
+//       .set('Content-Type', 'application/json')
+//       .json(response);
+
+//   } catch (error) {
+//     console.error('❌ Error in /shipping-rates:', error.message);
+//     console.error('Error stack:', error.stack);
+//     return res.status(200).json({ rates: [] });
+//   }
+// });
+
+// // Endpoint لاختبار حساب السعر
+// app.get('/test-rate', async (req, res) => {
+//   try {
+//     const testData = {
+//       destinationCountry: 'JO',
+//       destinationCity: 'Amman',
+//       weight: 1000,
+//       length: 20,
+//       width: 15,
+//       height: 10
+//     };
+
+//     const rate = await emiratesPostService.calculateInternationalRate(testData);
+    
+//     res.json({
+//       success: true,
+//       testData,
+//       result: rate
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // عرض الدول المتاحة
+// app.get('/countries', async (req, res) => {
+//   try {
+//     const countries = await emiratesPostService.getCountries();
+//     res.json({
+//       success: true,
+//       count: countries.length,
+//       countries
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // عرض الإمارات المتاحة
+// app.get('/emirates', async (req, res) => {
+//   try {
+//     const emirates = await emiratesPostService.getEmirates();
+//     res.json({
+//       success: true,
+//       count: emirates.length,
+//       emirates
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // معالجة الأخطاء العامة
+// app.use((err, req, res, next) => {
+//   console.error('❌ Unhandled error:', err);
+//   res.status(500).json({ rates: [] });
+// });
+
+// // بدء الخادم
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server is running on port ${PORT}`);
+//   console.log(`🌐 API Provider: Emirates Post`);
+//   console.log(`📍 Endpoints:`);
+//   console.log(`   - GET  /`);
+//   console.log(`   - POST /shipping-rates (Shopify webhook)`);
+//   console.log(`   - GET  /test-rate`);
+//   console.log(`   - GET  /countries`);
+//   console.log(`   - GET  /emirates`);
+//   console.log(`   - GET  /health`);
+//   console.log(`✅ Ready to receive requests from Shopify!`);
+// });
+///////////////////////////////////////////////////////////////////////////////////////////
+
+// require('dotenv').config();
+// const express = require('express');
+// const emiratesPostService = require('./services/emiratesPostService');
+// const app = express();
+// const PORT = process.env.PORT || 3000;
+
+// // Middleware
+// app.use(express.json());
+
+// // CORS للسماح لـ Shopify بالاتصال
+// app.use((req, res, next) => {
+//   res.header('Access-Control-Allow-Origin', '*');
+//   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+//   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+//   if (req.method === 'OPTIONS') {
+//     return res.sendStatus(200);
+//   }
+//   next();
+// });
+
+// // الصفحة الرئيسية
+// app.get('/', (req, res) => {
+//   res.json({
+//     status: '✅ التطبيق يعمل بنجاح',
+//     message: 'تطبيق حساب الشحن عبر API البريد الإماراتي لـ Shopify',
+//     version: '2.1.0',
+//     apiProvider: 'Emirates Post API',
+//     endpoints: {
+//       main: 'POST /shipping-rates',
+//       test: 'GET /test-rate',
+//       countries: 'GET /countries',
+//       emirates: 'GET /emirates',
+//       health: 'GET /health'
+//     },
+//     timestamp: new Date().toISOString()
+//   });
+// });
+
+// // Health check
+// app.get('/health', (req, res) => {
+//   res.json({
+//     status: 'healthy',
+//     uptime: process.uptime(),
+//     timestamp: new Date().toISOString()
+//   });
+// });
+
+// // Endpoint الرئيسي لـ Shopify
+// app.post('/shipping-rates', async (req, res) => {
+//   try {
+//     console.log('📦 ===== Shopify Request Received =====');
+//     console.log('Full Request Body:', JSON.stringify(req.body, null, 2));
+
+//     const { rate } = req.body;
+
+//     // التحقق من البيانات المطلوبة
+//     if (!rate || !rate.destination) {
+//       console.error('❌ Invalid request structure');
+//       return res.status(200).json({ rates: [] });
+//     }
+
+//     const destination = rate.destination;
+//     const items = rate.items || [];
+    
+//     // حساب الوزن الإجمالي والأبعاد
+//     let totalWeight = 0;
+//     let maxLength = 0;
+//     let maxWidth = 0;
+//     let maxHeight = 0;
+//     let totalVolume = 0;
+
+//     items.forEach(item => {
+//       const quantity = item.quantity || 1;
+      
+//       // حساب الوزن - Shopify يرسله بالجرام في حقل grams
+//       const itemWeight = item.grams || 0;
+//       totalWeight += itemWeight * quantity;
+      
+//       console.log(`📦 Item: ${item.name}, Weight: ${itemWeight}g, Qty: ${quantity}`);
+      
+//       // محاولة قراءة الأبعاد من عدة مصادر محتملة
+//       let length = 0, width = 0, height = 0;
+      
+//       // 1. من variant_id إذا كان موجود (قد يحتوي على الأبعاد)
+//       if (item.product_id) {
+//         // الأبعاد قد تكون موجودة في metadata
+//         if (item.properties) {
+//           length = parseFloat(item.properties.length || 0);
+//           width = parseFloat(item.properties.width || 0);
+//           height = parseFloat(item.properties.height || 0);
+//         }
+//       }
+      
+//       // 2. محاولة حساب الأبعاد من الوزن إذا لم تكن متوفرة
+//       if (length === 0 && width === 0 && height === 0 && itemWeight > 0) {
+//         // حساب تقريبي للأبعاد بناءً على الوزن
+//         // نفترض كثافة معينة وشكل مكعب تقريباً
+//         const volumeCm3 = itemWeight / 0.5; // كثافة افتراضية
+//         const sideLength = Math.cbrt(volumeCm3); // طول ضلع المكعب
+        
+//         length = Math.max(10, Math.ceil(sideLength * 1.5)); // نجعله مستطيل
+//         width = Math.max(10, Math.ceil(sideLength));
+//         height = Math.max(5, Math.ceil(sideLength * 0.7));
+//       }
+      
+//       // تحديث القيم القصوى
+//       maxLength = Math.max(maxLength, length * quantity);
+//       maxWidth = Math.max(maxWidth, width);
+//       maxHeight = Math.max(maxHeight, height);
+      
+//       // حساب الحجم الإجمالي
+//       totalVolume += (length * width * height) * quantity;
+      
+//       console.log(`📏 Item Dimensions: ${length}x${width}x${height}cm`);
+//     });
+
+//     // قيم افتراضية إذا لم تكن البيانات متوفرة
+//     if (totalWeight === 0) {
+//       console.log('⚠️ No weight found, using default 500g');
+//       totalWeight = 500;
+//     }
+    
+//     // إذا لم نجد أبعاد محددة، نستخدم قيم افتراضية بناءً على الوزن
+//     if (maxLength === 0 || maxWidth === 0 || maxHeight === 0) {
+//       console.log('⚠️ No dimensions found, calculating from weight');
+      
+//       // حساب أبعاد تقريبية بناءً على الوزن
+//       if (totalWeight <= 500) {
+//         maxLength = 20;
+//         maxWidth = 15;
+//         maxHeight = 10;
+//       } else if (totalWeight <= 1000) {
+//         maxLength = 30;
+//         maxWidth = 20;
+//         maxHeight = 15;
+//       } else if (totalWeight <= 2000) {
+//         maxLength = 40;
+//         maxWidth = 30;
+//         maxHeight = 20;
+//       } else {
+//         // للأوزان الأثقل
+//         maxLength = 50;
+//         maxWidth = 40;
+//         maxHeight = 30;
+//       }
+//     }
+
+//     console.log(`📊 Final Calculated Values:`);
+//     console.log(`   Total Weight: ${totalWeight}g`);
+//     console.log(`   Dimensions: ${maxLength}x${maxWidth}x${maxHeight}cm`);
+
+//     const countryCode = destination.country ? destination.country.toUpperCase() : '';
+//     const isUAE = countryCode === 'AE';
+
+//     console.log(`🌍 Destination: ${countryCode} - ${isUAE ? 'Domestic' : 'International'}`);
+
+//     let shippingRate;
+
+//     if (isUAE) {
+//       // شحن محلي داخل الإمارات
+//       const cityId = emiratesPostService.getCityIdFromName(destination.city);
+//       shippingRate = await emiratesPostService.calculateDomesticRate({
+//         originCity: process.env.DEFAULT_ORIGIN_CITY || '3',
+//         destinationCity: cityId,
+//         weight: totalWeight,
+//         length: maxLength,
+//         width: maxWidth,
+//         height: maxHeight
+//       });
+//     } else {
+//       // شحن دولي
+//       shippingRate = await emiratesPostService.calculateInternationalRate({
+//         destinationCountry: countryCode,
+//         destinationCity: destination.city || '',
+//         weight: totalWeight,
+//         length: maxLength,
+//         width: maxWidth,
+//         height: maxHeight
+//       });
+//     }
+
+//     if (!shippingRate) {
+//       console.log('⚠️ No shipping rate available');
+//       return res.status(200).json({ rates: [] });
+//     }
+
+//     // تحويل السعر إلى فلس (cents)
+//     const priceInCents = Math.round(shippingRate.price * 100);
+
+//     const response = {
+//       rates: [
+//         {
+//           service_name: shippingRate.serviceName,
+//           service_code: shippingRate.serviceCode,
+//           total_price: priceInCents.toString(),
+//           currency: 'AED',
+//           description: shippingRate.description || `Weight: ${totalWeight}g, Size: ${maxLength}x${maxWidth}x${maxHeight}cm`
+//         }
+//       ]
+//     };
+
+//     console.log('✅ Response sent:', JSON.stringify(response, null, 2));
+//     console.log('========================================');
+
+//     return res.status(200)
+//       .set('Content-Type', 'application/json')
+//       .json(response);
+
+//   } catch (error) {
+//     console.error('❌ Error in /shipping-rates:', error.message);
+//     console.error('Error stack:', error.stack);
+//     return res.status(200).json({ rates: [] });
+//   }
+// });
+
+// // Endpoint لاختبار حساب السعر
+// app.get('/test-rate', async (req, res) => {
+//   try {
+//     const testData = {
+//       destinationCountry: 'JO',
+//       destinationCity: 'Amman',
+//       weight: 1000,
+//       length: 20,
+//       width: 15,
+//       height: 10
+//     };
+
+//     const rate = await emiratesPostService.calculateInternationalRate(testData);
+    
+//     res.json({
+//       success: true,
+//       testData,
+//       result: rate
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // عرض الدول المتاحة
+// app.get('/countries', async (req, res) => {
+//   try {
+//     const countries = await emiratesPostService.getCountries();
+//     res.json({
+//       success: true,
+//       count: countries.length,
+//       countries
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // عرض الإمارات المتاحة
+// app.get('/emirates', async (req, res) => {
+//   try {
+//     const emirates = await emiratesPostService.getEmirates();
+//     res.json({
+//       success: true,
+//       count: emirates.length,
+//       emirates
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       error: error.message
+//     });
+//   }
+// });
+
+// // معالجة الأخطاء العامة
+// app.use((err, req, res, next) => {
+//   console.error('❌ Unhandled error:', err);
+//   res.status(500).json({ rates: [] });
+// });
+
+// // بدء الخادم
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server is running on port ${PORT}`);
+//   console.log(`🌐 API Provider: Emirates Post`);
+//   console.log(`📍 Endpoints:`);
+//   console.log(`   - GET  /`);
+//   console.log(`   - POST /shipping-rates (Shopify webhook)`);
+//   console.log(`   - GET  /test-rate`);
+//   console.log(`   - GET  /countries`);
+//   console.log(`   - GET  /emirates`);
+//   console.log(`   - GET  /health`);
+//   console.log(`✅ Ready to receive requests from Shopify!`);
+// });
+
+////////////////////////////////////////////////////////////////////////////////////
 require('dotenv').config();
 const express = require('express');
 const emiratesPostService = require('./services/emiratesPostService');
@@ -23,11 +556,13 @@ app.get('/', (req, res) => {
   res.json({
     status: '✅ التطبيق يعمل بنجاح',
     message: 'تطبيق حساب الشحن عبر API البريد الإماراتي لـ Shopify',
-    version: '2.0.0',
+    version: '2.2.0',
     apiProvider: 'Emirates Post API',
+    shippingType: 'STANDARD Service (PRO-712)',
     endpoints: {
       main: 'POST /shipping-rates',
       test: 'GET /test-rate',
+      testPostman: 'POST /test-shopify-request',
       countries: 'GET /countries',
       emirates: 'GET /emirates',
       health: 'GET /health'
@@ -48,8 +583,13 @@ app.get('/health', (req, res) => {
 // Endpoint الرئيسي لـ Shopify
 app.post('/shipping-rates', async (req, res) => {
   try {
-    console.log('📦 ===== Shopify Request Received =====');
-    console.log('Full Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('\n' + '='.repeat(80));
+    console.log('📦 NEW SHOPIFY REQUEST RECEIVED');
+    console.log('⏰ Time:', new Date().toISOString());
+    console.log('='.repeat(80));
+    console.log('📋 Full Request Body:');
+    console.log(JSON.stringify(req.body, null, 2));
+    console.log('-'.repeat(80));
 
     const { rate } = req.body;
 
@@ -62,41 +602,96 @@ app.post('/shipping-rates', async (req, res) => {
     const destination = rate.destination;
     const items = rate.items || [];
     
+    console.log('📍 DESTINATION DETAILS:');
+    console.log(`   Country Code: ${destination.country}`);
+    console.log(`   City: ${destination.city}`);
+    console.log(`   Province: ${destination.province}`);
+    console.log(`   Postal Code: ${destination.postal_code}`);
+    console.log('-'.repeat(80));
+    
     // حساب الوزن الإجمالي والأبعاد
     let totalWeight = 0;
     let maxLength = 0;
     let maxWidth = 0;
     let maxHeight = 0;
 
-    items.forEach(item => {
-      // الوزن بالجرام
-      totalWeight += (item.grams || 0) * (item.quantity || 1);
+    console.log('📦 ITEMS ANALYSIS:');
+    items.forEach((item, index) => {
+      const quantity = item.quantity || 1;
+      const itemWeight = item.grams || 0;
+      totalWeight += itemWeight * quantity;
       
-      // الأبعاد (إذا كانت متوفرة)
+      console.log(`\n   Item #${index + 1}:`);
+      console.log(`   - Name: ${item.name}`);
+      console.log(`   - SKU: ${item.sku || 'N/A'}`);
+      console.log(`   - Weight: ${itemWeight}g`);
+      console.log(`   - Quantity: ${quantity}`);
+      console.log(`   - Total Weight: ${itemWeight * quantity}g`);
+      
+      // محاولة قراءة الأبعاد
+      let length = 0, width = 0, height = 0;
+      
       if (item.properties) {
-        maxLength = Math.max(maxLength, parseFloat(item.properties.length || 0));
-        maxWidth = Math.max(maxWidth, parseFloat(item.properties.width || 0));
-        maxHeight = Math.max(maxHeight, parseFloat(item.properties.height || 0));
+        length = parseFloat(item.properties.length || 0);
+        width = parseFloat(item.properties.width || 0);
+        height = parseFloat(item.properties.height || 0);
       }
+      
+      // حساب تقريبي للأبعاد إذا لم تكن متوفرة
+      if (length === 0 && width === 0 && height === 0 && itemWeight > 0) {
+        const volumeCm3 = itemWeight / 0.5;
+        const sideLength = Math.cbrt(volumeCm3);
+        
+        length = Math.max(10, Math.ceil(sideLength * 1.5));
+        width = Math.max(10, Math.ceil(sideLength));
+        height = Math.max(5, Math.ceil(sideLength * 0.7));
+      }
+      
+      maxLength = Math.max(maxLength, length);
+      maxWidth = Math.max(maxWidth, width);
+      maxHeight = Math.max(maxHeight, height);
+      
+      console.log(`   - Dimensions: ${length}x${width}x${height}cm`);
     });
 
-    // قيم افتراضية إذا لم تكن الأبعاد متوفرة
-    if (totalWeight === 0) totalWeight = 500;
-    if (maxLength === 0) maxLength = 20;
-    if (maxWidth === 0) maxWidth = 15;
-    if (maxHeight === 0) maxHeight = 10;
+    // قيم افتراضية إذا لم تكن البيانات متوفرة
+    if (totalWeight === 0) {
+      console.log('\n⚠️  No weight found, using default 500g');
+      totalWeight = 500;
+    }
+    
+    if (maxLength === 0 || maxWidth === 0 || maxHeight === 0) {
+      console.log('⚠️  No dimensions found, calculating from weight');
+      
+      if (totalWeight <= 500) {
+        maxLength = 20; maxWidth = 15; maxHeight = 10;
+      } else if (totalWeight <= 1000) {
+        maxLength = 30; maxWidth = 20; maxHeight = 15;
+      } else if (totalWeight <= 2000) {
+        maxLength = 40; maxWidth = 30; maxHeight = 20;
+      } else {
+        maxLength = 50; maxWidth = 40; maxHeight = 30;
+      }
+    }
 
-    console.log(`📊 Calculated - Weight: ${totalWeight}g, Dimensions: ${maxLength}x${maxWidth}x${maxHeight}cm`);
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 FINAL SHIPMENT DETAILS:');
+    console.log(`   Total Weight: ${totalWeight}g`);
+    console.log(`   Package Dimensions: ${maxLength} x ${maxWidth} x ${maxHeight} cm`);
+    console.log(`   Volume: ${(maxLength * maxWidth * maxHeight).toFixed(2)} cm³`);
+    console.log('='.repeat(80));
 
     const countryCode = destination.country ? destination.country.toUpperCase() : '';
     const isUAE = countryCode === 'AE';
 
-    console.log(`🌍 Destination: ${countryCode} - ${isUAE ? 'Domestic' : 'International'}`);
+    console.log(`\n🌍 SHIPPING TYPE: ${isUAE ? '🇦🇪 DOMESTIC (UAE)' : '🌏 INTERNATIONAL'}`);
+    console.log(`   Destination Country: ${countryCode}`);
+    console.log('-'.repeat(80));
 
     let shippingRate;
 
     if (isUAE) {
-      // شحن محلي داخل الإمارات
+      console.log('🚚 Calling DOMESTIC rate calculation...\n');
       const cityId = emiratesPostService.getCityIdFromName(destination.city);
       shippingRate = await emiratesPostService.calculateDomesticRate({
         originCity: process.env.DEFAULT_ORIGIN_CITY || '3',
@@ -107,7 +702,7 @@ app.post('/shipping-rates', async (req, res) => {
         height: maxHeight
       });
     } else {
-      // شحن دولي
+      console.log('✈️  Calling INTERNATIONAL rate calculation...\n');
       shippingRate = await emiratesPostService.calculateInternationalRate({
         destinationCountry: countryCode,
         destinationCity: destination.city || '',
@@ -119,7 +714,8 @@ app.post('/shipping-rates', async (req, res) => {
     }
 
     if (!shippingRate) {
-      console.log('⚠️ No shipping rate available');
+      console.log('\n❌ No shipping rate returned from Emirates Post');
+      console.log('='.repeat(80) + '\n');
       return res.status(200).json({ rates: [] });
     }
 
@@ -133,22 +729,163 @@ app.post('/shipping-rates', async (req, res) => {
           service_code: shippingRate.serviceCode,
           total_price: priceInCents.toString(),
           currency: 'AED',
-          description: shippingRate.description || ''
+          description: shippingRate.description || `Weight: ${totalWeight}g, Size: ${maxLength}x${maxWidth}x${maxHeight}cm`
         }
       ]
     };
 
-    console.log('✅ Response sent:', JSON.stringify(response, null, 2));
-    console.log('========================================');
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ SUCCESS - RESPONSE TO SHOPIFY:');
+    console.log(JSON.stringify(response, null, 2));
+    console.log('='.repeat(80) + '\n');
 
     return res.status(200)
       .set('Content-Type', 'application/json')
       .json(response);
 
   } catch (error) {
-    console.error('❌ Error in /shipping-rates:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('\n' + '='.repeat(80));
+    console.error('❌ CRITICAL ERROR in /shipping-rates:');
+    console.error('Error Message:', error.message);
+    console.error('Error Stack:', error.stack);
+    console.error('='.repeat(80) + '\n');
     return res.status(200).json({ rates: [] });
+  }
+});
+
+// ✅ Endpoint جديد لاختبار عبر Postman
+app.post('/test-shopify-request', async (req, res) => {
+  try {
+    console.log('\n🧪 TEST REQUEST RECEIVED');
+    
+    // محاكاة طلب Shopify
+    const testRequest = {
+      rate: {
+        origin: {
+          country: "AE",
+          postal_code: "",
+          province: "Dubai",
+          city: "Dubai",
+          name: null,
+          address1: "",
+          address2: "",
+          address3: null,
+          phone: "",
+          fax: null,
+          email: null,
+          address_type: null,
+          company_name: ""
+        },
+        destination: {
+          country: req.body.country || "JO",
+          postal_code: req.body.postal_code || "",
+          province: req.body.province || "",
+          city: req.body.city || "Amman",
+          name: null,
+          address1: "",
+          address2: "",
+          address3: null,
+          phone: "",
+          fax: null,
+          email: null,
+          address_type: null,
+          company_name: ""
+        },
+        items: [
+          {
+            name: req.body.item_name || "Test Product",
+            sku: "TEST-SKU",
+            quantity: req.body.quantity || 1,
+            grams: req.body.weight || 250,
+            price: 10000,
+            vendor: "Test Vendor",
+            requires_shipping: true,
+            taxable: true,
+            fulfillment_service: "manual",
+            properties: null,
+            product_id: null,
+            variant_id: null
+          }
+        ],
+        currency: "AED",
+        locale: "en"
+      }
+    };
+    
+    // استدعاء الـ endpoint الرئيسي
+    req.body = testRequest;
+    
+    // إعادة استخدام logic من /shipping-rates
+    const { rate } = testRequest;
+    const destination = rate.destination;
+    const items = rate.items;
+    
+    let totalWeight = 0;
+    items.forEach(item => {
+      totalWeight += (item.grams || 0) * (item.quantity || 1);
+    });
+    
+    // استخدام أبعاد افتراضية
+    const dimensions = {
+      length: 20,
+      width: 15,
+      height: 10
+    };
+    
+    const countryCode = destination.country.toUpperCase();
+    const isUAE = countryCode === 'AE';
+    
+    let shippingRate;
+    
+    if (isUAE) {
+      const cityId = emiratesPostService.getCityIdFromName(destination.city);
+      shippingRate = await emiratesPostService.calculateDomesticRate({
+        originCity: '3',
+        destinationCity: cityId,
+        weight: totalWeight,
+        ...dimensions
+      });
+    } else {
+      shippingRate = await emiratesPostService.calculateInternationalRate({
+        destinationCountry: countryCode,
+        destinationCity: destination.city,
+        weight: totalWeight,
+        ...dimensions
+      });
+    }
+    
+    if (!shippingRate) {
+      return res.json({
+        success: false,
+        message: 'No rate returned from Emirates Post',
+        testRequest
+      });
+    }
+    
+    const priceInCents = Math.round(shippingRate.price * 100);
+    
+    res.json({
+      success: true,
+      message: 'Test completed successfully',
+      testRequest,
+      emiratesPostResponse: shippingRate.details,
+      shopifyResponse: {
+        rates: [{
+          service_name: shippingRate.serviceName,
+          service_code: shippingRate.serviceCode,
+          total_price: priceInCents.toString(),
+          currency: 'AED',
+          price_in_aed: shippingRate.price
+        }]
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -158,18 +895,21 @@ app.get('/test-rate', async (req, res) => {
     const testData = {
       destinationCountry: 'JO',
       destinationCity: 'Amman',
-      weight: 1000,
+      weight: 250,
       length: 20,
       width: 15,
       height: 10
     };
 
+    console.log('\n🧪 Running test with data:', testData);
     const rate = await emiratesPostService.calculateInternationalRate(testData);
     
     res.json({
       success: true,
       testData,
-      result: rate
+      result: rate,
+      priceInAED: rate ? rate.price : null,
+      priceInCents: rate ? Math.round(rate.price * 100) : null
     });
   } catch (error) {
     res.status(500).json({
@@ -221,14 +961,21 @@ app.use((err, req, res, next) => {
 
 // بدء الخادم
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log('\n' + '='.repeat(80));
+  console.log('🚀 SERVER STARTED SUCCESSFULLY');
+  console.log('='.repeat(80));
+  console.log(`📡 Port: ${PORT}`);
   console.log(`🌐 API Provider: Emirates Post`);
-  console.log(`📍 Endpoints:`);
-  console.log(`   - GET  /`);
+  console.log(`📦 Shipping Type: STANDARD Service (PRO-712)`);
+  console.log(`\n📍 Available Endpoints:`);
+  console.log(`   - GET  / (Info)`);
   console.log(`   - POST /shipping-rates (Shopify webhook)`);
-  console.log(`   - GET  /test-rate`);
+  console.log(`   - POST /test-shopify-request (Postman testing)`);
+  console.log(`   - GET  /test-rate (Quick test)`);
   console.log(`   - GET  /countries`);
   console.log(`   - GET  /emirates`);
   console.log(`   - GET  /health`);
-  console.log(`✅ Ready to receive requests from Shopify!`);
+  console.log('='.repeat(80));
+  console.log('✅ Ready to receive requests from Shopify!');
+  console.log('='.repeat(80) + '\n');
 });
