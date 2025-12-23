@@ -232,6 +232,272 @@
 // }
 
 // module.exports = new EmiratesPostService();
+////////////////////////////////////////////////////////////////////////////////
+
+// const axios = require('axios');
+
+// const API_BASE_URL = process.env.EMIRATES_POST_API_URL;
+// const ACCOUNT_NO = process.env.EMIRATES_POST_ACCOUNT_NO;
+// const PASSWORD = process.env.EMIRATES_POST_PASSWORD;
+
+// // كاش للدول والإمارات لتقليل الطلبات
+// let countriesCache = null;
+// let emiratesCache = null;
+
+// class EmiratesPostService {
+  
+//   // جلب قائمة الدول
+//   async getCountries() {
+//     if (countriesCache) {
+//       return countriesCache;
+//     }
+
+//     try {
+//       const response = await axios.get(`${API_BASE_URL}/lookups/rest/GetCountries`);
+      
+//       if (response.data && response.data.CountriesResponse && response.data.CountriesResponse.Countries) {
+//         countriesCache = response.data.CountriesResponse.Countries.Country || [];
+//         return countriesCache;
+//       }
+      
+//       return [];
+//     } catch (error) {
+//       console.error('❌ Error fetching countries:', error.message);
+//       return [];
+//     }
+//   }
+
+//   // جلب قائمة الإمارات
+//   async getEmirates() {
+//     if (emiratesCache) {
+//       return emiratesCache;
+//     }
+
+//     try {
+//       const response = await axios.get(`${API_BASE_URL}/lookups/rest/GetEmiratesDetails`);
+      
+//       if (response.data && response.data.GetEmiratesDetailsResult && response.data.GetEmiratesDetailsResult.EmirateBO) {
+//         emiratesCache = response.data.GetEmiratesDetailsResult.EmirateBO;
+//         return emiratesCache;
+//       }
+      
+//       return [];
+//     } catch (error) {
+//       console.error('❌ Error fetching emirates:', error.message);
+//       return [];
+//     }
+//   }
+
+//   // الحصول على معرف الدولة من كود الدولة
+//   async getCountryIdByCode(countryCode) {
+//     const countries = await this.getCountries();
+//     const country = countries.find(c => c.CountryCode === countryCode);
+    
+//     console.log(`🔍 Looking for country: ${countryCode}`);
+//     console.log(`✅ Found country:`, country);
+    
+//     return country ? country.CountryId : null;
+//   }
+
+//   // الحصول على معرف المدينة من اسم المدينة
+//   getCityIdFromName(cityName) {
+//     // خريطة تقريبية للمدن الرئيسية في الإمارات
+//     const cityMap = {
+//       'dubai': '3',
+//       'abu dhabi': '2',
+//       'sharjah': '5',
+//       'ajman': '4',
+//       'ras al khaimah': '6',
+//       'fujairah': '7',
+//       'umm al quwain': '8'
+//     };
+
+//     if (!cityName) return '3'; // Dubai كقيمة افتراضية
+    
+//     const normalizedCity = cityName.toLowerCase().trim();
+//     return cityMap[normalizedCity] || '3';
+//   }
+
+//   // حساب سعر الشحن الدولي - STANDARD (تم تعديله)
+//   async calculateInternationalRate(data) {
+//     const {
+//       destinationCountry,
+//       destinationCity,
+//       weight,
+//       length,
+//       width,
+//       height
+//     } = data;
+
+//     try {
+//       // الحصول على معرف الدولة
+//       const countryId = await this.getCountryIdByCode(destinationCountry);
+      
+//       if (!countryId) {
+//         console.log(`⚠️ Country ${destinationCountry} not found in Emirates Post system`);
+//         return null;
+//       }
+
+//       // ✅ تم التغيير من Premium إلى Standard
+//       const requestBody = {
+//         RateCalculationRequest: {
+//           ShipmentType: "Standard",  // ✅ تغيير من Premium
+//           ServiceType: "International",
+//           OriginState: "",
+//           OriginCity: parseInt(process.env.DEFAULT_ORIGIN_CITY || '3'),
+//           DestinationCountry: parseInt(countryId),
+//           DestinationState: "",
+//           DestinationCity: destinationCity || "",
+//           Length: Math.ceil(length),
+//           Width: Math.ceil(width),
+//           Height: Math.ceil(height),
+//           Weight: Math.ceil(weight),
+//           CalculationCurrencyCode: "AED",
+//           ContentTypeCode: "NonDocument",
+//           DimensionUnit: "Centimetre",
+//           WeightUnit: "Grams",
+//           IsRegistered: "No",
+//           ProductCode: "PRO-712"  // ✅ تغيير من PRO-26 (Standard Service Code)
+//         }
+//       };
+
+//       console.log('📤 International Rate Request:');
+//       console.log(JSON.stringify(requestBody, null, 2));
+
+//       const response = await axios.post(
+//         `${API_BASE_URL}/ratecalculator/rest/CalculatePriceRate`,
+//         requestBody,
+//         {
+//           headers: {
+//             'Content-Type': 'application/json',
+//             'AccountNo': ACCOUNT_NO,
+//             'Password': PASSWORD
+//           }
+//         }
+//       );
+
+//       console.log('📥 International Rate Response:');
+//       console.log(JSON.stringify(response.data, null, 2));
+
+//       if (response.data && response.data.RateCalculationResponse) {
+//         const rateData = response.data.RateCalculationResponse;
+        
+//         // ✅ تحسين استخراج السعر
+//         const baseRate = parseFloat(rateData.BaseRate || 0);
+//         const totalRate = parseFloat(rateData.TotalRate || 0);
+//         const finalPrice = totalRate > 0 ? totalRate : baseRate;
+        
+//         console.log(`💰 Price Details:`);
+//         console.log(`   Base Rate: ${baseRate} AED`);
+//         console.log(`   Total Rate: ${totalRate} AED`);
+//         console.log(`   Final Price: ${finalPrice} AED`);
+        
+//         return {
+//           price: finalPrice,
+//           serviceName: `International Standard Shipping`,  // ✅ تغيير الاسم
+//           serviceCode: `INT_STD_${destinationCountry}`,
+//           description: `Standard international shipping to ${destinationCountry}`,
+//           details: rateData
+//         };
+//       }
+
+//       return null;
+//     } catch (error) {
+//       console.error('❌ Error calculating international rate:', error.message);
+//       if (error.response) {
+//         console.error('📛 Response Status:', error.response.status);
+//         console.error('📛 Response Data:', JSON.stringify(error.response.data, null, 2));
+//       }
+//       return null;
+//     }
+//   }
+
+//   // حساب سعر الشحن المحلي
+//   async calculateDomesticRate(data) {
+//     const {
+//       originCity,
+//       destinationCity,
+//       weight,
+//       length,
+//       width,
+//       height
+//     } = data;
+
+//     try {
+//       const requestBody = {
+//         RateCalculationRequest: {
+//           ShipmentType: "Express",
+//           ServiceType: "Domestic",
+//           ContentTypeCode: "NonDocument",
+//           OriginState: null,
+//           OriginCity: originCity.toString(),
+//           DestinationCountry: "971",
+//           DestinationState: null,
+//           DestinationCity: destinationCity.toString(),
+//           Height: Math.ceil(height),
+//           Width: Math.ceil(width),
+//           Length: Math.ceil(length),
+//           DimensionUnit: "Centimetre",
+//           Weight: Math.ceil(weight).toString(),
+//           WeightUnit: "Grams",
+//           CalculationCurrencyCode: "AED",
+//           IsRegistered: "No",
+//           ProductCode: "EPG-21"
+//         }
+//       };
+
+//       console.log('📤 Domestic Rate Request:');
+//       console.log(JSON.stringify(requestBody, null, 2));
+
+//       const response = await axios.post(
+//         `${API_BASE_URL}/ratecalculator/rest/CalculatePriceRate`,
+//         requestBody,
+//         {
+//           headers: {
+//             'Content-Type': 'application/json',
+//             'AccountNo': ACCOUNT_NO,
+//             'Password': PASSWORD
+//           }
+//         }
+//       );
+
+//       console.log('📥 Domestic Rate Response:');
+//       console.log(JSON.stringify(response.data, null, 2));
+
+//       if (response.data && response.data.RateCalculationResponse) {
+//         const rateData = response.data.RateCalculationResponse;
+        
+//         const baseRate = parseFloat(rateData.BaseRate || 0);
+//         const totalRate = parseFloat(rateData.TotalRate || 0);
+//         const finalPrice = totalRate > 0 ? totalRate : baseRate;
+        
+//         console.log(`💰 Price Details:`);
+//         console.log(`   Base Rate: ${baseRate} AED`);
+//         console.log(`   Total Rate: ${totalRate} AED`);
+//         console.log(`   Final Price: ${finalPrice} AED`);
+        
+//         return {
+//           price: finalPrice,
+//           serviceName: 'Domestic Express Shipping (UAE)',
+//           serviceCode: 'DOM_UAE',
+//           description: 'Express domestic shipping within UAE',
+//           details: rateData
+//         };
+//       }
+
+//       return null;
+//     } catch (error) {
+//       console.error('❌ Error calculating domestic rate:', error.message);
+//       if (error.response) {
+//         console.error('📛 Response Status:', error.response.status);
+//         console.error('📛 Response Data:', JSON.stringify(error.response.data, null, 2));
+//       }
+//       return null;
+//     }
+//   }
+// }
+
+// module.exports = new EmiratesPostService();
 
 
 const axios = require('axios');
@@ -240,13 +506,12 @@ const API_BASE_URL = process.env.EMIRATES_POST_API_URL;
 const ACCOUNT_NO = process.env.EMIRATES_POST_ACCOUNT_NO;
 const PASSWORD = process.env.EMIRATES_POST_PASSWORD;
 
-// كاش للدول والإمارات لتقليل الطلبات
+// كاش للدول والإمارات
 let countriesCache = null;
 let emiratesCache = null;
 
 class EmiratesPostService {
   
-  // جلب قائمة الدول
   async getCountries() {
     if (countriesCache) {
       return countriesCache;
@@ -257,6 +522,7 @@ class EmiratesPostService {
       
       if (response.data && response.data.CountriesResponse && response.data.CountriesResponse.Countries) {
         countriesCache = response.data.CountriesResponse.Countries.Country || [];
+        console.log(`✅ Loaded ${countriesCache.length} countries`);
         return countriesCache;
       }
       
@@ -267,7 +533,6 @@ class EmiratesPostService {
     }
   }
 
-  // جلب قائمة الإمارات
   async getEmirates() {
     if (emiratesCache) {
       return emiratesCache;
@@ -288,20 +553,21 @@ class EmiratesPostService {
     }
   }
 
-  // الحصول على معرف الدولة من كود الدولة
   async getCountryIdByCode(countryCode) {
     const countries = await this.getCountries();
     const country = countries.find(c => c.CountryCode === countryCode);
     
-    console.log(`🔍 Looking for country: ${countryCode}`);
-    console.log(`✅ Found country:`, country);
+    if (country) {
+      console.log(`✅ Found country: ${country.CountryName} (ID: ${country.CountryId})`);
+    } else {
+      console.log(`❌ Country not found: ${countryCode}`);
+      console.log('Available countries:', countries.slice(0, 5).map(c => `${c.CountryCode}:${c.CountryId}`));
+    }
     
     return country ? country.CountryId : null;
   }
 
-  // الحصول على معرف المدينة من اسم المدينة
   getCityIdFromName(cityName) {
-    // خريطة تقريبية للمدن الرئيسية في الإمارات
     const cityMap = {
       'dubai': '3',
       'abu dhabi': '2',
@@ -312,13 +578,13 @@ class EmiratesPostService {
       'umm al quwain': '8'
     };
 
-    if (!cityName) return '3'; // Dubai كقيمة افتراضية
+    if (!cityName) return '3';
     
     const normalizedCity = cityName.toLowerCase().trim();
     return cityMap[normalizedCity] || '3';
   }
 
-  // حساب سعر الشحن الدولي - STANDARD (تم تعديله)
+  // 🔧 حساب سعر الشحن الدولي - مع تجربة خدمات متعددة
   async calculateInternationalRate(data) {
     const {
       destinationCountry,
@@ -334,79 +600,116 @@ class EmiratesPostService {
       const countryId = await this.getCountryIdByCode(destinationCountry);
       
       if (!countryId) {
-        console.log(`⚠️ Country ${destinationCountry} not found in Emirates Post system`);
+        console.log(`⚠️ Country ${destinationCountry} not found`);
         return null;
       }
 
-      // ✅ تم التغيير من Premium إلى Standard
-      const requestBody = {
-        RateCalculationRequest: {
-          ShipmentType: "Standard",  // ✅ تغيير من Premium
-          ServiceType: "International",
-          OriginState: "",
-          OriginCity: parseInt(process.env.DEFAULT_ORIGIN_CITY || '3'),
-          DestinationCountry: parseInt(countryId),
-          DestinationState: "",
-          DestinationCity: destinationCity || "",
-          Length: Math.ceil(length),
-          Width: Math.ceil(width),
-          Height: Math.ceil(height),
-          Weight: Math.ceil(weight),
-          CalculationCurrencyCode: "AED",
-          ContentTypeCode: "NonDocument",
-          DimensionUnit: "Centimetre",
-          WeightUnit: "Grams",
-          IsRegistered: "No",
-          ProductCode: "PRO-712"  // ✅ تغيير من PRO-26 (Standard Service Code)
-        }
-      };
-
-      console.log('📤 International Rate Request:');
-      console.log(JSON.stringify(requestBody, null, 2));
-
-      const response = await axios.post(
-        `${API_BASE_URL}/ratecalculator/rest/CalculatePriceRate`,
-        requestBody,
+      // 🔧 قائمة الخدمات للتجربة بالترتيب
+      const serviceOptions = [
         {
-          headers: {
-            'Content-Type': 'application/json',
-            'AccountNo': ACCOUNT_NO,
-            'Password': PASSWORD
-          }
+          name: 'Standard Service',
+          ShipmentType: 'Standard',
+          ProductCode: 'PRO-712'
+        },
+        {
+          name: 'Economy Service', 
+          ShipmentType: 'Economy',
+          ProductCode: 'PRO-713'
+        },
+        {
+          name: 'EMX International DOU',
+          ShipmentType: 'Premium',
+          ProductCode: 'PRO-272'
+        },
+        {
+          name: 'EMX International DDU',
+          ShipmentType: 'Premium',
+          ProductCode: 'PRO-273'
         }
-      );
+      ];
 
-      console.log('📥 International Rate Response:');
-      console.log(JSON.stringify(response.data, null, 2));
-
-      if (response.data && response.data.RateCalculationResponse) {
-        const rateData = response.data.RateCalculationResponse;
+      // جرب كل خدمة حتى نجد واحدة تعمل
+      for (const service of serviceOptions) {
+        console.log(`\n🔄 Trying ${service.name}...`);
         
-        // ✅ تحسين استخراج السعر
-        const baseRate = parseFloat(rateData.BaseRate || 0);
-        const totalRate = parseFloat(rateData.TotalRate || 0);
-        const finalPrice = totalRate > 0 ? totalRate : baseRate;
-        
-        console.log(`💰 Price Details:`);
-        console.log(`   Base Rate: ${baseRate} AED`);
-        console.log(`   Total Rate: ${totalRate} AED`);
-        console.log(`   Final Price: ${finalPrice} AED`);
-        
-        return {
-          price: finalPrice,
-          serviceName: `International Standard Shipping`,  // ✅ تغيير الاسم
-          serviceCode: `INT_STD_${destinationCountry}`,
-          description: `Standard international shipping to ${destinationCountry}`,
-          details: rateData
+        const requestBody = {
+          RateCalculationRequest: {
+            ShipmentType: service.ShipmentType,
+            ServiceType: "International",
+            OriginState: "",
+            OriginCity: parseInt(process.env.DEFAULT_ORIGIN_CITY || '3'),
+            DestinationCountry: parseInt(countryId),
+            DestinationState: "",
+            DestinationCity: destinationCity || "",
+            Length: Math.ceil(length),
+            Width: Math.ceil(width),
+            Height: Math.ceil(height),
+            Weight: Math.ceil(weight),
+            CalculationCurrencyCode: "AED",
+            ContentTypeCode: "NonDocument",
+            DimensionUnit: "Centimetre",
+            WeightUnit: "Grams",
+            IsRegistered: "No",
+            ProductCode: service.ProductCode
+          }
         };
+
+        console.log('📤 Request:', JSON.stringify(requestBody, null, 2));
+
+        try {
+          const response = await axios.post(
+            `${API_BASE_URL}/ratecalculator/rest/CalculatePriceRate`,
+            requestBody,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'AccountNo': ACCOUNT_NO,
+                'Password': PASSWORD
+              }
+            }
+          );
+
+          console.log('📥 Response:', JSON.stringify(response.data, null, 2));
+
+          if (response.data && response.data.RateCalculationResponse) {
+            const rateData = response.data.RateCalculationResponse;
+            
+            // تحقق من وجود سعر صالح
+            const baseRate = parseFloat(rateData.BaseRate || 0);
+            const totalRate = parseFloat(rateData.TotalRate || 0);
+            const finalPrice = totalRate > 0 ? totalRate : baseRate;
+            
+            if (finalPrice > 0) {
+              console.log(`✅ SUCCESS with ${service.name}`);
+              console.log(`💰 Price: ${finalPrice} AED`);
+              
+              return {
+                price: finalPrice,
+                serviceName: `International Shipping (${service.name})`,
+                serviceCode: `INT_${service.ProductCode}_${destinationCountry}`,
+                description: `International shipping to ${destinationCountry}`,
+                details: rateData
+              };
+            } else {
+              console.log(`⚠️ ${service.name} returned zero price`);
+            }
+          }
+        } catch (error) {
+          console.error(`❌ ${service.name} failed:`, error.message);
+          if (error.response) {
+            console.error('Response:', JSON.stringify(error.response.data, null, 2));
+          }
+          // استمر في تجربة الخدمة التالية
+        }
       }
 
+      console.log('❌ All services failed');
       return null;
+
     } catch (error) {
-      console.error('❌ Error calculating international rate:', error.message);
+      console.error('❌ Error in calculateInternationalRate:', error.message);
       if (error.response) {
-        console.error('📛 Response Status:', error.response.status);
-        console.error('📛 Response Data:', JSON.stringify(error.response.data, null, 2));
+        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
       }
       return null;
     }
@@ -446,8 +749,7 @@ class EmiratesPostService {
         }
       };
 
-      console.log('📤 Domestic Rate Request:');
-      console.log(JSON.stringify(requestBody, null, 2));
+      console.log('📤 Domestic Request:', JSON.stringify(requestBody, null, 2));
 
       const response = await axios.post(
         `${API_BASE_URL}/ratecalculator/rest/CalculatePriceRate`,
@@ -461,8 +763,7 @@ class EmiratesPostService {
         }
       );
 
-      console.log('📥 Domestic Rate Response:');
-      console.log(JSON.stringify(response.data, null, 2));
+      console.log('📥 Domestic Response:', JSON.stringify(response.data, null, 2));
 
       if (response.data && response.data.RateCalculationResponse) {
         const rateData = response.data.RateCalculationResponse;
@@ -471,26 +772,24 @@ class EmiratesPostService {
         const totalRate = parseFloat(rateData.TotalRate || 0);
         const finalPrice = totalRate > 0 ? totalRate : baseRate;
         
-        console.log(`💰 Price Details:`);
-        console.log(`   Base Rate: ${baseRate} AED`);
-        console.log(`   Total Rate: ${totalRate} AED`);
-        console.log(`   Final Price: ${finalPrice} AED`);
-        
-        return {
-          price: finalPrice,
-          serviceName: 'Domestic Express Shipping (UAE)',
-          serviceCode: 'DOM_UAE',
-          description: 'Express domestic shipping within UAE',
-          details: rateData
-        };
+        if (finalPrice > 0) {
+          console.log(`✅ Domestic rate: ${finalPrice} AED`);
+          
+          return {
+            price: finalPrice,
+            serviceName: 'Domestic Express Shipping (UAE)',
+            serviceCode: 'DOM_UAE',
+            description: 'Express domestic shipping within UAE',
+            details: rateData
+          };
+        }
       }
 
       return null;
     } catch (error) {
       console.error('❌ Error calculating domestic rate:', error.message);
       if (error.response) {
-        console.error('📛 Response Status:', error.response.status);
-        console.error('📛 Response Data:', JSON.stringify(error.response.data, null, 2));
+        console.error('Response:', JSON.stringify(error.response.data, null, 2));
       }
       return null;
     }
