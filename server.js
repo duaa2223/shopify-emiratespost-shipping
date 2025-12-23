@@ -1246,7 +1246,6 @@
 //     });
 //   }
 // });
-
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios'); // ✅ هذا كان ناقص!
@@ -1670,6 +1669,20 @@ app.post('/test-all-services', async (req, res) => {
           }
         );
 
+        console.log('Raw API Response:', JSON.stringify(response.data, null, 2));
+
+        // تحقق من وجود البيانات
+        if (!response.data || !response.data.RateCalculationResponse) {
+          results.push({
+            service: service.name,
+            productCode: service.ProductCode,
+            status: '⚠️ NO RESPONSE DATA',
+            rawResponse: response.data,
+            requestSent: requestBody
+          });
+          continue;
+        }
+
         const rateData = response.data.RateCalculationResponse;
         const price = parseFloat(rateData.TotalRate || rateData.BaseRate || 0);
 
@@ -1685,12 +1698,18 @@ app.post('/test-all-services', async (req, res) => {
 
         console.log(`✅ ${service.name}: ${price} AED`);
       } catch (error) {
+        console.error(`API Error for ${service.name}:`, error.message);
+        if (error.response) {
+          console.error('Error Response:', JSON.stringify(error.response.data, null, 2));
+        }
+        
         results.push({
           service: service.name,
           productCode: service.ProductCode,
           status: '❌ FAILED',
           error: error.message,
-          errorDetails: error.response?.data
+          errorDetails: error.response?.data,
+          requestSent: requestBody
         });
         console.log(`❌ ${service.name} failed: ${error.message}`);
       }
@@ -1790,13 +1809,26 @@ app.get('/test-api-connection', async (req, res) => {
         }
       );
       
-      const rate = rateResponse.data.RateCalculationResponse;
-      rateTest = {
-        status: '✅ Success',
-        price: rate.TotalRate || rate.BaseRate,
-        fullResponse: rate
-      };
+      console.log('Full API Response:', JSON.stringify(rateResponse.data, null, 2));
+      
+      if (!rateResponse.data || !rateResponse.data.RateCalculationResponse) {
+        rateTest = {
+          status: '⚠️ NO RESPONSE DATA',
+          rawResponse: rateResponse.data
+        };
+      } else {
+        const rate = rateResponse.data.RateCalculationResponse;
+        rateTest = {
+          status: '✅ Success',
+          price: rate.TotalRate || rate.BaseRate,
+          fullResponse: rate
+        };
+      }
     } catch (error) {
+      console.error('Rate calculation error:', error.message);
+      if (error.response) {
+        console.error('Error response:', JSON.stringify(error.response.data, null, 2));
+      }
       rateTest = {
         status: '❌ Failed',
         error: error.message,
